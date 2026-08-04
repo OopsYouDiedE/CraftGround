@@ -27,6 +27,8 @@ from ..craftground_native import (  # noqa
 
 from ..environment.action_space import no_op_v2, action_v2_dict_to_message
 
+DEFAULT_ACTION_BUFFER_SIZE = 1024 * 1024
+
 
 class BoostIPC(IPCInterface):
     def __init__(
@@ -41,21 +43,31 @@ class BoostIPC(IPCInterface):
         self.initial_environment = initial_environment
         initial_environment_bytes: bytes = initial_environment.SerializeToString()
 
-        # Get the length of the action space message
-        dummy_action: ActionSpaceMessageV2 = action_v2_dict_to_message(no_op_v2())
-        dummy_action_bytes: bytes = dummy_action.SerializeToString()
-        print(f"Length of Dummy_action_bytes: {len(dummy_action_bytes)}")
+        # A protobuf no-op serializes to zero bytes, so it cannot define the
+        # capacity of a variable-length action and command message.
+        self.action_buffer_size = DEFAULT_ACTION_BUFFER_SIZE
         self.find_free_port = find_free_port
         self.port = initialize_shared_memory(
             int(self.port),
             initial_environment_bytes,
             len(initial_environment_bytes),
-            len(dummy_action_bytes),
+            self.action_buffer_size,
             find_free_port,
         )
         self.SHMEM_PREFIX = "Global\\" if platform.system() == "Windows" else "/"
         self.p2j_shared_memory_name = f"{self.SHMEM_PREFIX}craftground_{self.port}_p2j"
         self.j2p_shared_memory_name = f"{self.SHMEM_PREFIX}craftground_{self.port}_j2p"
+        self._destroyed = False
+
+    def _write_action_bytes(self, action_bytes: bytes):
+        if len(action_bytes) > self.action_buffer_size:
+            raise ValueError(
+                "Serialized action exceeds the shared-memory action buffer: "
+                f"{len(action_bytes)} > {self.action_buffer_size} bytes"
+            )
+        write_to_shared_memory(
+            self.p2j_shared_memory_name, action_bytes, len(action_bytes)
+        )
 
     def send_action(
         self, action: ActionSpaceMessageV2, commands: Optional[List[str]] = None
@@ -66,9 +78,7 @@ class BoostIPC(IPCInterface):
 
         action_bytes: bytes = action.SerializeToString()
         # self.logger.log(f"Sending action to shared memory: {len(action_bytes)} bytes")
-        write_to_shared_memory(
-            self.p2j_shared_memory_name, action_bytes, len(action_bytes)
-        )
+        self._write_action_bytes(action_bytes)
 
     def read_observation(self) -> ObservationSpaceMessage:
         # self.logger.log("Reading observation from shared memory")
@@ -80,8 +90,11 @@ class BoostIPC(IPCInterface):
         return observation_space
 
     def destroy(self):
+        if getattr(self, "_destroyed", True):
+            return
         destroy_shared_memory(self.p2j_shared_memory_name, True)
         destroy_shared_memory(self.j2p_shared_memory_name, True)
+        self._destroyed = True
         # Java destroys the initial environment shared memory
         # destroy_shared_memory(self.initial_environment_shared_memory_name)
 
@@ -103,7 +116,7 @@ class BoostIPC(IPCInterface):
         action_space.commands.extend(commands)
         v = action_space.SerializeToString()
         self.logger.log(f"Sending action to shared memory: {len(v)} bytes")
-        write_to_shared_memory(self.p2j_shared_memory_name, v, len(v))
+        self._write_action_bytes(v)
 
     def _read_handshake_ack(self) -> HandshakeAck:
         # Java writes exactly one HandshakeAck payload over the same j2p channel/protocol as a

@@ -9,9 +9,9 @@ name: Kotlin CI with Gradle
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "tao-maintained" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "tao-maintained" ]
 
 jobs:
   gradle_build:

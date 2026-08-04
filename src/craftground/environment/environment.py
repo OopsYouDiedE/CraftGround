@@ -121,6 +121,7 @@ class CraftGroundEnvironment(gym.Env):
             backend=LogBackend.BOTH if verbose_python else LogBackend.NONE,
         )
 
+        self._ipc_ready = False
         if self.use_shared_memory:
             from .boost_ipc import BoostIPC  # type: ignore
 
@@ -137,6 +138,7 @@ class CraftGroundEnvironment(gym.Env):
                 port,
                 find_free_port,
             )
+        self._ipc_ready = True
 
         self.observation_converter = ObservationConverter(
             self.initial_env.screen_encoding_mode,
@@ -208,23 +210,28 @@ class CraftGroundEnvironment(gym.Env):
                 return
             else:
                 self.terminate()
+        elif self.process is not None:
+            # Clean up IPC left behind by a Java process that exited itself.
+            self.terminate()
 
-        if self.use_shared_memory:
-            from .boost_ipc import BoostIPC  # type: ignore
+        if not self._ipc_ready:
+            if self.use_shared_memory:
+                from .boost_ipc import BoostIPC  # type: ignore
 
-            self.ipc = BoostIPC(
-                self.ipc.port,
-                self.ipc.find_free_port,
-                self.initial_env_message,
-                self.logger,
-            )
-        else:
-            self.ipc = SocketIPC(
-                self.logger,
-                self.initial_env_message,
-                self.ipc.port,
-                self.ipc.find_free_port,
-            )
+                self.ipc = BoostIPC(
+                    self.ipc.port,
+                    self.ipc.find_free_port,
+                    self.initial_env_message,
+                    self.logger,
+                )
+            else:
+                self.ipc = SocketIPC(
+                    self.logger,
+                    self.initial_env_message,
+                    self.ipc.port,
+                    self.ipc.find_free_port,
+                )
+            self._ipc_ready = True
 
         self.start_server(seed=seed)
 
@@ -391,10 +398,13 @@ class CraftGroundEnvironment(gym.Env):
 
     def terminate(self):
         self.server_event = None
-        try:
-            self.ipc.destroy()
-        except Exception:
-            pass
+        if self._ipc_ready:
+            try:
+                self.ipc.destroy()
+            except Exception:
+                pass
+            finally:
+                self._ipc_ready = False
 
         p = self.process
         if not p:

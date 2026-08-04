@@ -413,7 +413,9 @@ class MinecraftEnv :
         client: MinecraftClient,
         player: ClientPlayerEntity,
     ): Boolean {
-        if (command == "respawn") {
+        if (MemorySnapshotStore.handle(command, client)) {
+            return true
+        } else if (command == "respawn") {
             if (client.currentScreen is DeathScreen && player.isDead) {
                 player.requestRespawn()
                 sendSetScreenNull(client)

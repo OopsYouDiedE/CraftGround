@@ -8,10 +8,10 @@ set(CMAKE_FIND_PACKAGE_SORT_ORDER NATURAL)
 set(CMAKE_FIND_PACKAGE_SORT_DIRECTION DEC)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# GL frame capture sources are shared across Minecraft versions (mc121, mc262) since the
-# capture logic itself doesn't depend on the Minecraft version - only each mod's own Gradle
-# project compiles it into its own native-lib. See docs/26_2_MigrationPlan.md.
-set(GL_CAPTURE_DIR ${CMAKE_CURRENT_LIST_DIR}/../../../../../shared-native/gl-capture)
+# Keep the mc121 runtime package self-contained. The files in this directory are synchronized
+# from shared-native/gl-capture so wheels and Git subdirectory installs can build after the
+# repository checkout used to create them is gone.
+set(GL_CAPTURE_DIR ${CMAKE_CURRENT_LIST_DIR})
 
 include(FetchContent)
 
