@@ -244,10 +244,10 @@ loom {
 sourceSets {
     main {
         java {
-            srcDir '../../shared-java/src/main/java'
+            srcDir 'shared-java/src/main/java'
         }
         kotlin {
-            srcDir '../../shared-java/src/main/kotlin'
+            srcDir 'shared-java/src/main/kotlin'
         }
     }
 }
