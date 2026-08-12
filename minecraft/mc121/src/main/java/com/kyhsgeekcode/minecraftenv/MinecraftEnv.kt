@@ -17,7 +17,6 @@ import com.kyhsgeekcode.minecraftenv.proto.lidarRay
 import com.kyhsgeekcode.minecraftenv.proto.lidarResult
 import com.kyhsgeekcode.minecraftenv.proto.nearbyBiome
 import com.kyhsgeekcode.minecraftenv.proto.observationSpaceMessage
-import com.kyhsgeekcode.minecraftenv.mixin.ClientRenderInvoker
 import com.mojang.blaze3d.platform.GlConst
 import com.mojang.blaze3d.systems.RenderSystem
 import net.fabricmc.api.ModInitializer
@@ -649,7 +648,7 @@ class MinecraftEnv :
                         MouseInfo.mouseY * client.window.scaledHeight.toDouble() /
                             client.window.height.toDouble()
                     ).toInt()
-                (client as ClientRenderInvoker).invokeRender(true)
+                render(client)
                 imageByteString1 =
                     FramebufferCapturer.captureFramebuffer(
                         buffer.colorAttachment,
