@@ -83,6 +83,7 @@ enum class StepPhase {
     ACTION_APPLIED,
     CLIENT_TICK_COMPLETED,
     POST_ACTION_RENDER_COMPLETED,
+    POST_ACTION_CLIENT_TICK_COMPLETED,
 }
 
 val chatList = mutableListOf<ChatMessageRecord>()
@@ -275,6 +276,8 @@ class MinecraftEnv :
             ClientTickEvents.EndTick {
                 if (stepPhase == StepPhase.ACTION_APPLIED) {
                     stepPhase = StepPhase.CLIENT_TICK_COMPLETED
+                } else if (stepPhase == StepPhase.POST_ACTION_RENDER_COMPLETED) {
+                    stepPhase = StepPhase.POST_ACTION_CLIENT_TICK_COMPLETED
                 }
             },
         )
@@ -360,7 +363,7 @@ class MinecraftEnv :
                 stepPhase = StepPhase.POST_ACTION_RENDER_COMPLETED
                 return
             }
-            if (stepPhase != StepPhase.POST_ACTION_RENDER_COMPLETED ||
+            if (stepPhase != StepPhase.POST_ACTION_CLIENT_TICK_COMPLETED ||
                 renderSequence <= actionRenderSequence + 1 ||
                 (MinecraftClient.getInstance().currentScreen != null &&
                     screenRenderedSequence != renderSequence)
