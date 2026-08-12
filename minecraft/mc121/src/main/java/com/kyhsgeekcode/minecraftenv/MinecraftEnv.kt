@@ -346,7 +346,7 @@ class MinecraftEnv :
         onStartWorldTick(initializer, world, messageIO)
         if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
             pendingObservation = messageIO to world
-            rendersUntilObservation = 3
+            rendersUntilObservation = 1
         }
     }
 
@@ -681,7 +681,6 @@ class MinecraftEnv :
                         MouseInfo.mouseY * client.window.scaledHeight.toDouble() /
                             client.window.height.toDouble()
                     ).toInt()
-                render(client)
                 imageByteString1 =
                     FramebufferCapturer.captureFramebuffer(
                         buffer.colorAttachment,
