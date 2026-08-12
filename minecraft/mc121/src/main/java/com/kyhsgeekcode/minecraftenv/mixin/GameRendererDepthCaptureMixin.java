@@ -21,6 +21,24 @@ public class GameRendererDepthCaptureMixin implements GameRendererDepthCaptureMi
     @Unique
     private float[] lastDepthBuffer = null;
 
+    @Inject(method = "render", at = @At("HEAD"))
+    private void markRenderStart(
+            RenderTickCounter tickCounter,
+            boolean tick,
+            CallbackInfo callbackInfo
+    ) {
+        MinecraftEnv.onRenderStart();
+    }
+
+    @Inject(method = "render", at = @At("RETURN"))
+    private void sendObservationAfterRender(
+            RenderTickCounter tickCounter,
+            boolean tick,
+            CallbackInfo callbackInfo
+    ) {
+        MinecraftEnv.onRenderComplete();
+    }
+
     @Inject(
             method = "renderWorld",
             at = @At(
