@@ -78,14 +78,6 @@ enum class IOPhase {
     SENT_OBSERVATION_SHOULD_READ_ACTION,
 }
 
-enum class StepPhase {
-    WAITING_ACTION,
-    ACTION_APPLIED,
-    CLIENT_TICK_COMPLETED,
-    POST_ACTION_RENDER_COMPLETED,
-    POST_ACTION_CLIENT_TICK_COMPLETED,
-}
-
 val chatList = mutableListOf<ChatMessageRecord>()
 
 class MinecraftEnv :
@@ -96,17 +88,12 @@ class MinecraftEnv :
 
         @JvmStatic
         fun onRenderStart() {
-            activeInstance?.startRender()
+            activeInstance?.readActionBeforeRender()
         }
 
         @JvmStatic
         fun onRenderComplete() {
             activeInstance?.sendPendingObservation()
-        }
-
-        @JvmStatic
-        fun onScreenRendered() {
-            activeInstance?.screenRenderedSequence = activeInstance?.renderSequence ?: -1L
         }
 
         @JvmStatic
@@ -141,10 +128,7 @@ class MinecraftEnv :
     private var pendingObservation: Pair<MessageIO, ClientWorld>? = null
     private lateinit var initializer: EnvironmentInitializer
     private lateinit var messageIO: MessageIO
-    private var stepPhase = StepPhase.WAITING_ACTION
-    private var renderSequence = 0L
-    private var actionRenderSequence = -1L
-    private var screenRenderedSequence = -1L
+    private var rendersUntilObservation = 0
 
     override fun onInitialize() {
         activeInstance = this
@@ -266,19 +250,8 @@ class MinecraftEnv :
                 }
                 if (resetPhase != ResetPhase.END_RESET) {
                     client.world?.let { world -> onStartWorldTick(initializer, world, messageIO) }
-                } else {
-                    readActionAtClientTickStart(client)
                 }
                 csvLogger.profileEndPrint("Minecraft_env/onInitialize/ClientTick")
-            },
-        )
-        ClientTickEvents.END_CLIENT_TICK.register(
-            ClientTickEvents.EndTick {
-                if (stepPhase == StepPhase.ACTION_APPLIED) {
-                    stepPhase = StepPhase.CLIENT_TICK_COMPLETED
-                } else if (stepPhase == StepPhase.POST_ACTION_RENDER_COMPLETED) {
-                    stepPhase = StepPhase.POST_ACTION_CLIENT_TICK_COMPLETED
-                }
             },
         )
         ClientTickEvents.END_WORLD_TICK.register(
@@ -356,44 +329,24 @@ class MinecraftEnv :
 
     private fun sendPendingObservation() {
         val pending = pendingObservation ?: return
-        if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
-            if (stepPhase == StepPhase.CLIENT_TICK_COMPLETED &&
-                renderSequence > actionRenderSequence
-            ) {
-                stepPhase = StepPhase.POST_ACTION_RENDER_COMPLETED
-                return
-            }
-            if (stepPhase != StepPhase.POST_ACTION_CLIENT_TICK_COMPLETED ||
-                renderSequence <= actionRenderSequence + 1 ||
-                (MinecraftClient.getInstance().currentScreen != null &&
-                    screenRenderedSequence != renderSequence)
-            ) return
-        }
+        rendersUntilObservation--
+        if (rendersUntilObservation > 0) return
         pendingObservation = null
         sendObservation(pending.first, pending.second)
-        if (ioPhase == IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION) {
-            stepPhase = StepPhase.WAITING_ACTION
-        }
     }
 
-    private fun startRender() {
-        renderSequence++
-    }
-
-    private fun readActionAtClientTickStart(client: MinecraftClient) {
+    private fun readActionBeforeRender() {
         if (!::initializer.isInitialized || !::messageIO.isInitialized) return
         if (pendingObservation != null) return
-        if (stepPhase != StepPhase.WAITING_ACTION) return
         if (resetPhase != ResetPhase.END_RESET) return
         if (ioPhase != IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION &&
             ioPhase != IOPhase.GOT_INITIAL_ENVIRONMENT_SENT_OBSERVATION_SKIP_SEND_OBSERVATION
         ) return
-        val world = client.world ?: return
+        val world = MinecraftClient.getInstance().world ?: return
         onStartWorldTick(initializer, world, messageIO)
         if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
             pendingObservation = messageIO to world
-            stepPhase = StepPhase.ACTION_APPLIED
-            actionRenderSequence = renderSequence
+            rendersUntilObservation = 2
         }
     }
 
@@ -728,6 +681,7 @@ class MinecraftEnv :
                         MouseInfo.mouseY * client.window.scaledHeight.toDouble() /
                             client.window.height.toDouble()
                     ).toInt()
+                render(client)
                 imageByteString1 =
                     FramebufferCapturer.captureFramebuffer(
                         buffer.colorAttachment,
