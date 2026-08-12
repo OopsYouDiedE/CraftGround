@@ -128,7 +128,7 @@ class MinecraftEnv :
     private var pendingObservation: Pair<MessageIO, ClientWorld>? = null
     private lateinit var initializer: EnvironmentInitializer
     private lateinit var messageIO: MessageIO
-    private var rendersUntilObservation = 0
+    private var waitingForPostActionClientTick = false
 
     override fun onInitialize() {
         activeInstance = this
@@ -233,6 +233,7 @@ class MinecraftEnv :
         this.messageIO = messageIO
         ClientTickEvents.START_CLIENT_TICK.register(
             ClientTickEvents.StartTick { client: MinecraftClient ->
+                waitingForPostActionClientTick = false
                 printWithTime("Start Client tick")
                 csvLogger.profileStartPrint("Minecraft_env/onInitialize/ClientTick")
                 initializer.onClientTick(client)
@@ -329,8 +330,7 @@ class MinecraftEnv :
 
     private fun sendPendingObservation() {
         val pending = pendingObservation ?: return
-        rendersUntilObservation--
-        if (rendersUntilObservation > 0) return
+        if (waitingForPostActionClientTick) return
         pendingObservation = null
         sendObservation(pending.first, pending.second)
     }
@@ -346,7 +346,7 @@ class MinecraftEnv :
         onStartWorldTick(initializer, world, messageIO)
         if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
             pendingObservation = messageIO to world
-            rendersUntilObservation = 2
+            waitingForPostActionClientTick = true
         }
     }
 
