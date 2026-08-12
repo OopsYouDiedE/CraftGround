@@ -103,6 +103,11 @@ class MinecraftEnv :
         }
 
         @JvmStatic
+        fun onScreenRendered() {
+            activeInstance?.screenRenderedSequence = activeInstance?.renderSequence ?: -1L
+        }
+
+        @JvmStatic
         val REALISTIC_HUMAN =
             Registry.register(
                 Registries.ENTITY_TYPE,
@@ -137,6 +142,7 @@ class MinecraftEnv :
     private var stepPhase = StepPhase.WAITING_ACTION
     private var renderSequence = 0L
     private var actionRenderSequence = -1L
+    private var screenRenderedSequence = -1L
 
     override fun onInitialize() {
         activeInstance = this
@@ -348,7 +354,9 @@ class MinecraftEnv :
         val pending = pendingObservation ?: return
         if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION &&
             (stepPhase != StepPhase.CLIENT_TICK_COMPLETED ||
-                renderSequence <= actionRenderSequence)
+                renderSequence <= actionRenderSequence ||
+                (MinecraftClient.getInstance().currentScreen != null &&
+                    screenRenderedSequence != renderSequence))
         ) return
         pendingObservation = null
         sendObservation(pending.first, pending.second)

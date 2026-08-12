@@ -40,6 +40,22 @@ public class GameRendererDepthCaptureMixin implements GameRendererDepthCaptureMi
     }
 
     @Inject(
+            method = "render",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/gui/screen/Screen;renderWithTooltip(Lnet/minecraft/client/gui/DrawContext;IIF)V",
+                    shift = At.Shift.AFTER
+            )
+    )
+    private void markScreenRendered(
+            RenderTickCounter tickCounter,
+            boolean tick,
+            CallbackInfo callbackInfo
+    ) {
+        MinecraftEnv.onScreenRendered();
+    }
+
+    @Inject(
             method = "renderWorld",
             at = @At(
                     value = "INVOKE",
