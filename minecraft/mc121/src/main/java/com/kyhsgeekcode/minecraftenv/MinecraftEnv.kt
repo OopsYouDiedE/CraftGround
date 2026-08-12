@@ -239,18 +239,12 @@ class MinecraftEnv :
                 if (deathMessageCollector == null) {
                     deathMessageCollector = client.networkHandler as GetMessagesInterface?
                 }
+                client.world?.let { world ->
+                    csvLogger.profileStartPrint("Minecraft_env/onInitialize/ClientTick/ReadAction")
+                    onStartWorldTick(initializer, world, messageIO)
+                    csvLogger.profileEndPrint("Minecraft_env/onInitialize/ClientTick/ReadAction")
+                }
                 csvLogger.profileEndPrint("Minecraft_env/onInitialize/ClientTick")
-            },
-        )
-        ClientTickEvents.START_WORLD_TICK.register(
-            ClientTickEvents.StartWorldTick { world: ClientWorld ->
-                // read input
-                printWithTime("Start client World tick")
-                csvLogger.log("Start World tick")
-                csvLogger.profileStartPrint("Minecraft_env/onInitialize/ClientWorldTick")
-                onStartWorldTick(initializer, world, messageIO)
-                csvLogger.profileEndPrint("Minecraft_env/onInitialize/ClientWorldTick")
-                csvLogger.log("End World tick")
             },
         )
         ClientTickEvents.END_WORLD_TICK.register(
