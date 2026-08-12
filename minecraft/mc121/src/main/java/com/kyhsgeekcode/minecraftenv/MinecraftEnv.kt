@@ -26,6 +26,7 @@ import net.minecraft.block.BlockState
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.MinecraftClient.IS_SYSTEM_MAC
 import net.minecraft.client.gui.screen.DeathScreen
+import net.minecraft.client.gui.screen.ingame.InventoryScreen
 import net.minecraft.client.network.ClientPlayerEntity
 import net.minecraft.client.render.BackgroundRenderer
 import net.minecraft.client.world.ClientWorld
@@ -43,6 +44,7 @@ import net.minecraft.util.WorldSavePath
 import net.minecraft.util.function.BooleanBiFunction
 import net.minecraft.util.math.BlockPos
 import net.minecraft.util.math.Box
+import org.lwjgl.glfw.GLFW.GLFW_KEY_E
 import net.minecraft.util.math.Vec3d
 import net.minecraft.util.shape.VoxelShapes
 import net.minecraft.world.biome.source.BiomeCoords
@@ -482,8 +484,14 @@ class MinecraftEnv :
             MouseInfo.moveMouseBy(dx.toInt(), dy.toInt())
         }
 
-        // Handle key press
-        KeyboardInfo.onAction(actionDict)
+        // Inventory is opened immediately because this action is read after Minecraft's normal
+        // input phase. Sending a GLFW E callback here postpones the screen transition to a later
+        // client tick and returns stale framebuffer observations.
+        val inventoryWasPressed = actionDict.inventory && !KeyboardInfo.isKeyPressed(GLFW_KEY_E)
+        if (inventoryWasPressed && client.currentScreen == null) {
+            client.setScreen(InventoryScreen(player))
+        }
+        KeyboardInfo.onAction(actionDict, handleInventory = false)
         val currentScreen = client.currentScreen
         if (currentScreen != null && currentScreen is DeathScreen) {
             // Disable disconnect button
@@ -640,6 +648,7 @@ class MinecraftEnv :
                         MouseInfo.mouseY * client.window.scaledHeight.toDouble() /
                             client.window.height.toDouble()
                     ).toInt()
+                render(client)
                 imageByteString1 =
                     FramebufferCapturer.captureFramebuffer(
                         buffer.colorAttachment,

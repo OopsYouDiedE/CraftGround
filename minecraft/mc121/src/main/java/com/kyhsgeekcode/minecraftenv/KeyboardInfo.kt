@@ -55,7 +55,10 @@ object KeyboardInfo {
             "Hotbar9" to GLFW_KEY_9,
         )
 
-    fun onAction(actionDict: ActionSpace.ActionSpaceMessageV2) {
+    fun onAction(
+        actionDict: ActionSpace.ActionSpaceMessageV2,
+        handleInventory: Boolean = true,
+    ) {
         val actions =
             mapOf(
                 "W" to actionDict.forward,
@@ -65,7 +68,7 @@ object KeyboardInfo {
                 "LShift" to actionDict.sneak,
                 "Ctrl" to actionDict.sprint,
                 "Space" to actionDict.jump,
-                "E" to actionDict.inventory,
+                "E" to (actionDict.inventory && handleInventory),
                 "Q" to actionDict.drop,
 //            "F" to actionDict.swapHands,
                 "Hotbar1" to actionDict.hotbar1,
