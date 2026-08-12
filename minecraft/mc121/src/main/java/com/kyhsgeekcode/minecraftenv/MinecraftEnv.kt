@@ -128,6 +128,7 @@ class MinecraftEnv :
     private var pendingObservation: Pair<MessageIO, ClientWorld>? = null
     private lateinit var initializer: EnvironmentInitializer
     private lateinit var messageIO: MessageIO
+    private var rendersUntilObservation = 0
 
     override fun onInitialize() {
         activeInstance = this
@@ -328,12 +329,15 @@ class MinecraftEnv :
 
     private fun sendPendingObservation() {
         val pending = pendingObservation ?: return
+        rendersUntilObservation--
+        if (rendersUntilObservation > 0) return
         pendingObservation = null
         sendObservation(pending.first, pending.second)
     }
 
     private fun readActionBeforeRender() {
         if (!::initializer.isInitialized || !::messageIO.isInitialized) return
+        if (pendingObservation != null) return
         if (resetPhase != ResetPhase.END_RESET) return
         if (ioPhase != IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION &&
             ioPhase != IOPhase.GOT_INITIAL_ENVIRONMENT_SENT_OBSERVATION_SKIP_SEND_OBSERVATION
@@ -342,6 +346,7 @@ class MinecraftEnv :
         onStartWorldTick(initializer, world, messageIO)
         if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
             pendingObservation = messageIO to world
+            rendersUntilObservation = 2
         }
     }
 
