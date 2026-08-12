@@ -333,8 +333,9 @@ class MinecraftEnv :
 
     private fun readActionBeforeRender() {
         if (!::initializer.isInitialized || !::messageIO.isInitialized) return
-        if (resetPhase != ResetPhase.END_RESET ||
-            ioPhase != IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION
+        if (resetPhase != ResetPhase.END_RESET) return
+        if (ioPhase != IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION &&
+            ioPhase != IOPhase.GOT_INITIAL_ENVIRONMENT_SENT_OBSERVATION_SKIP_SEND_OBSERVATION
         ) return
         val world = MinecraftClient.getInstance().world ?: return
         onStartWorldTick(initializer, world, messageIO)
