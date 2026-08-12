@@ -93,6 +93,11 @@ class MinecraftEnv :
         private var activeInstance: MinecraftEnv? = null
 
         @JvmStatic
+        fun onRenderStart() {
+            activeInstance?.startRender()
+        }
+
+        @JvmStatic
         fun onRenderComplete() {
             activeInstance?.sendPendingObservation()
         }
@@ -130,9 +135,8 @@ class MinecraftEnv :
     private lateinit var initializer: EnvironmentInitializer
     private lateinit var messageIO: MessageIO
     private var stepPhase = StepPhase.WAITING_ACTION
-    private var actionSequence = 0L
-    private var clientTickSequence = 0L
     private var renderSequence = 0L
+    private var actionRenderSequence = -1L
 
     override fun onInitialize() {
         activeInstance = this
@@ -237,7 +241,6 @@ class MinecraftEnv :
         this.messageIO = messageIO
         ClientTickEvents.START_CLIENT_TICK.register(
             ClientTickEvents.StartTick { client: MinecraftClient ->
-                clientTickSequence++
                 printWithTime("Start Client tick")
                 csvLogger.profileStartPrint("Minecraft_env/onInitialize/ClientTick")
                 initializer.onClientTick(client)
@@ -342,20 +345,20 @@ class MinecraftEnv :
     }
 
     private fun sendPendingObservation() {
-        renderSequence++
         val pending = pendingObservation ?: return
         if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION &&
-            stepPhase != StepPhase.CLIENT_TICK_COMPLETED
+            (stepPhase != StepPhase.CLIENT_TICK_COMPLETED ||
+                renderSequence <= actionRenderSequence)
         ) return
-        println(
-            "CRAFTGROUND_SEQUENCE capture action=$actionSequence clientTick=$clientTickSequence " +
-                "render=$renderSequence screen=${MinecraftClient.getInstance().currentScreen?.javaClass?.simpleName}",
-        )
         pendingObservation = null
         sendObservation(pending.first, pending.second)
         if (ioPhase == IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION) {
             stepPhase = StepPhase.WAITING_ACTION
         }
+    }
+
+    private fun startRender() {
+        renderSequence++
     }
 
     private fun readActionAtClientTickStart(client: MinecraftClient) {
@@ -369,13 +372,9 @@ class MinecraftEnv :
         val world = client.world ?: return
         onStartWorldTick(initializer, world, messageIO)
         if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
-            actionSequence++
             pendingObservation = messageIO to world
             stepPhase = StepPhase.ACTION_APPLIED
-            println(
-                "CRAFTGROUND_SEQUENCE applied action=$actionSequence clientTick=$clientTickSequence " +
-                    "render=$renderSequence screen=${client.currentScreen?.javaClass?.simpleName}",
-            )
+            actionRenderSequence = renderSequence
         }
     }
 
