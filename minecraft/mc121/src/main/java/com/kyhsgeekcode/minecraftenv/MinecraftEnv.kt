@@ -677,6 +677,7 @@ class MinecraftEnv :
                         MouseInfo.mouseY * client.window.scaledHeight.toDouble() /
                             client.window.height.toDouble()
                     ).toInt()
+                render(client)
                 imageByteString1 =
                     FramebufferCapturer.captureFramebuffer(
                         buffer.colorAttachment,
