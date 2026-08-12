@@ -615,6 +615,8 @@ class MinecraftEnv :
                 )
                 // (client as ClientRenderInvoker).invokeRender(true)
                 render(client)
+                RenderSystem.replayQueue()
+                org.lwjgl.opengl.GL11.glFinish()
                 imageByteString1 =
                     FramebufferCapturer.captureFramebuffer(
                         buffer.colorAttachment,
