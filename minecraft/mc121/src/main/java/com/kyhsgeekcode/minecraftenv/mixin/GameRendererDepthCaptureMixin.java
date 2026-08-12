@@ -43,7 +43,7 @@ public class GameRendererDepthCaptureMixin implements GameRendererDepthCaptureMi
             method = "render",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/client/gui/screen/Screen;renderWithTooltip(Lnet/minecraft/client/gui/DrawContext;IIF)V",
+                    target = "Lnet/minecraft/client/gui/DrawContext;draw()V",
                     shift = At.Shift.AFTER
             )
     )
