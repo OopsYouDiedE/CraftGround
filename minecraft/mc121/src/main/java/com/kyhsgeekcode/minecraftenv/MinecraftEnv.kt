@@ -82,6 +82,7 @@ enum class StepPhase {
     WAITING_ACTION,
     ACTION_APPLIED,
     CLIENT_TICK_COMPLETED,
+    POST_ACTION_RENDER_COMPLETED,
 }
 
 val chatList = mutableListOf<ChatMessageRecord>()
@@ -104,10 +105,7 @@ class MinecraftEnv :
 
         @JvmStatic
         fun onScreenRendered() {
-            activeInstance?.let { instance ->
-                instance.screenRenderedSequence = instance.renderSequence
-                instance.sendPendingObservation()
-            }
+            activeInstance?.screenRenderedSequence = activeInstance?.renderSequence ?: -1L
         }
 
         @JvmStatic
@@ -355,12 +353,19 @@ class MinecraftEnv :
 
     private fun sendPendingObservation() {
         val pending = pendingObservation ?: return
-        if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION &&
-            (stepPhase != StepPhase.CLIENT_TICK_COMPLETED ||
-                renderSequence <= actionRenderSequence ||
+        if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
+            if (stepPhase == StepPhase.CLIENT_TICK_COMPLETED &&
+                renderSequence > actionRenderSequence
+            ) {
+                stepPhase = StepPhase.POST_ACTION_RENDER_COMPLETED
+                return
+            }
+            if (stepPhase != StepPhase.POST_ACTION_RENDER_COMPLETED ||
+                renderSequence <= actionRenderSequence + 1 ||
                 (MinecraftClient.getInstance().currentScreen != null &&
-                    screenRenderedSequence != renderSequence))
-        ) return
+                    screenRenderedSequence != renderSequence)
+            ) return
+        }
         pendingObservation = null
         sendObservation(pending.first, pending.second)
         if (ioPhase == IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION) {
