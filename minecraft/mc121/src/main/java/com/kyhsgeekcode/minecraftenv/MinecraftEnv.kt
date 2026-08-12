@@ -346,7 +346,7 @@ class MinecraftEnv :
         onStartWorldTick(initializer, world, messageIO)
         if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
             pendingObservation = messageIO to world
-            rendersUntilObservation = 1
+            rendersUntilObservation = 2
         }
     }
 
