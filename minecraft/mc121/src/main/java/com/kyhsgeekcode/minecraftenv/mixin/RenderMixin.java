@@ -1,5 +1,6 @@
 package com.kyhsgeekcode.minecraftenv.mixin;
 
+import com.kyhsgeekcode.minecraftenv.MinecraftEnv;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.Framebuffer;
@@ -8,9 +9,16 @@ import net.minecraft.client.util.Window;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(MinecraftClient.class)
 public class RenderMixin {
+  @Inject(method = "render", at = @At("RETURN"))
+  private void sendObservationAfterRender(boolean tick, CallbackInfo callbackInfo) {
+    MinecraftEnv.onRenderComplete();
+  }
+
   @Redirect(
       method = "render",
       at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gl/Framebuffer;endWrite()V"))

@@ -84,6 +84,13 @@ class MinecraftEnv :
     ModInitializer,
     CommandExecutor {
     companion object {
+        private var activeInstance: MinecraftEnv? = null
+
+        @JvmStatic
+        fun onRenderComplete() {
+            activeInstance?.sendPendingObservation()
+        }
+
         @JvmStatic
         val REALISTIC_HUMAN =
             Registry.register(
@@ -113,8 +120,10 @@ class MinecraftEnv :
     private var skipSync = false
     private var ioPhase = IOPhase.BEGINNING
     private var useSharedMemory = false
+    private var pendingObservation: Pair<MessageIO, ClientWorld>? = null
 
     override fun onInitialize() {
+        activeInstance = this
         val isLdPreloadSet = System.getenv("LD_PRELOAD")
         if (isLdPreloadSet != null) {
             println("LD_PRELOAD is set: $isLdPreloadSet")
@@ -273,7 +282,7 @@ class MinecraftEnv :
                     csvLogger.log("Skip send observation; $ioPhase")
                 } else {
                     csvLogger.log("Real send observation; $ioPhase")
-                    sendObservation(messageIO, world)
+                    pendingObservation = messageIO to world
                 }
                 csvLogger.profileEndPrint(
                     "Minecraft_env/onInitialize/EndWorldTick/SendObservation",
@@ -314,6 +323,12 @@ class MinecraftEnv :
                 )
             },
         )
+    }
+
+    private fun sendPendingObservation() {
+        val pending = pendingObservation ?: return
+        pendingObservation = null
+        sendObservation(pending.first, pending.second)
     }
 
     private fun onStartWorldTick(
