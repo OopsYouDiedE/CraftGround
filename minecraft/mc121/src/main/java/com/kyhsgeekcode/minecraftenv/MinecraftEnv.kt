@@ -276,7 +276,8 @@ class MinecraftEnv :
                 )
                 if (ioPhase ==
                     IOPhase.GOT_INITIAL_ENVIRONMENT_SENT_OBSERVATION_SKIP_SEND_OBSERVATION ||
-                    ioPhase == IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION
+                    ioPhase == IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION ||
+                    ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION
                 ) {
                     // pass
                     csvLogger.log("Skip send observation; $ioPhase")
@@ -339,6 +340,9 @@ class MinecraftEnv :
         ) return
         val world = MinecraftClient.getInstance().world ?: return
         onStartWorldTick(initializer, world, messageIO)
+        if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
+            pendingObservation = messageIO to world
+        }
     }
 
     private fun onStartWorldTick(
