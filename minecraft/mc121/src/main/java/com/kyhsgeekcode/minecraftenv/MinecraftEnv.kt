@@ -87,6 +87,11 @@ class MinecraftEnv :
         private var activeInstance: MinecraftEnv? = null
 
         @JvmStatic
+        fun onRenderStart() {
+            activeInstance?.readActionBeforeRender()
+        }
+
+        @JvmStatic
         fun onRenderComplete() {
             activeInstance?.sendPendingObservation()
         }
@@ -121,6 +126,8 @@ class MinecraftEnv :
     private var ioPhase = IOPhase.BEGINNING
     private var useSharedMemory = false
     private var pendingObservation: Pair<MessageIO, ClientWorld>? = null
+    private lateinit var initializer: EnvironmentInitializer
+    private lateinit var messageIO: MessageIO
 
     override fun onInitialize() {
         activeInstance = this
@@ -221,7 +228,8 @@ class MinecraftEnv :
         ioPhase = IOPhase.GOT_INITIAL_ENVIRONMENT_SHOULD_SEND_OBSERVATION
         resetPhase = ResetPhase.WAIT_INIT_ENDS
         csvLogger.log("Initial environment read; $ioPhase $resetPhase")
-        val initializer = EnvironmentInitializer(initialEnvironment, csvLogger)
+        initializer = EnvironmentInitializer(initialEnvironment, csvLogger)
+        this.messageIO = messageIO
         ClientTickEvents.START_CLIENT_TICK.register(
             ClientTickEvents.StartTick { client: MinecraftClient ->
                 printWithTime("Start Client tick")
@@ -238,11 +246,6 @@ class MinecraftEnv :
                 }
                 if (deathMessageCollector == null) {
                     deathMessageCollector = client.networkHandler as GetMessagesInterface?
-                }
-                client.world?.let { world ->
-                    csvLogger.profileStartPrint("Minecraft_env/onInitialize/ClientTick/ReadAction")
-                    onStartWorldTick(initializer, world, messageIO)
-                    csvLogger.profileEndPrint("Minecraft_env/onInitialize/ClientTick/ReadAction")
                 }
                 csvLogger.profileEndPrint("Minecraft_env/onInitialize/ClientTick")
             },
@@ -323,6 +326,12 @@ class MinecraftEnv :
         val pending = pendingObservation ?: return
         pendingObservation = null
         sendObservation(pending.first, pending.second)
+    }
+
+    private fun readActionBeforeRender() {
+        if (!::initializer.isInitialized || !::messageIO.isInitialized) return
+        val world = MinecraftClient.getInstance().world ?: return
+        onStartWorldTick(initializer, world, messageIO)
     }
 
     private fun onStartWorldTick(

@@ -14,6 +14,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(MinecraftClient.class)
 public class RenderMixin {
+  @Inject(method = "render", at = @At("HEAD"))
+  private void readActionBeforeRender(boolean tick, CallbackInfo callbackInfo) {
+    MinecraftEnv.onRenderStart();
+  }
+
   @Inject(method = "render", at = @At("RETURN"))
   private void sendObservationAfterRender(boolean tick, CallbackInfo callbackInfo) {
     MinecraftEnv.onRenderComplete();
