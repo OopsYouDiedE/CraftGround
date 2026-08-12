@@ -121,6 +121,7 @@ class MinecraftEnv :
     private var ioPhase = IOPhase.BEGINNING
     private var useSharedMemory = false
     private var pendingObservation: Pair<MessageIO, ClientWorld>? = null
+    private var pendingRenderCompletions = 0
 
     override fun onInitialize() {
         activeInstance = this
@@ -283,6 +284,7 @@ class MinecraftEnv :
                 } else {
                     csvLogger.log("Real send observation; $ioPhase")
                     pendingObservation = messageIO to world
+                    pendingRenderCompletions = 2
                 }
                 csvLogger.profileEndPrint(
                     "Minecraft_env/onInitialize/EndWorldTick/SendObservation",
@@ -327,6 +329,8 @@ class MinecraftEnv :
 
     private fun sendPendingObservation() {
         val pending = pendingObservation ?: return
+        pendingRenderCompletions--
+        if (pendingRenderCompletions > 0) return
         pendingObservation = null
         sendObservation(pending.first, pending.second)
     }
