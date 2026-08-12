@@ -247,6 +247,9 @@ class MinecraftEnv :
                 if (deathMessageCollector == null) {
                     deathMessageCollector = client.networkHandler as GetMessagesInterface?
                 }
+                if (resetPhase != ResetPhase.END_RESET) {
+                    client.world?.let { world -> onStartWorldTick(initializer, world, messageIO) }
+                }
                 csvLogger.profileEndPrint("Minecraft_env/onInitialize/ClientTick")
             },
         )
@@ -330,6 +333,9 @@ class MinecraftEnv :
 
     private fun readActionBeforeRender() {
         if (!::initializer.isInitialized || !::messageIO.isInitialized) return
+        if (resetPhase != ResetPhase.END_RESET ||
+            ioPhase != IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION
+        ) return
         val world = MinecraftClient.getInstance().world ?: return
         onStartWorldTick(initializer, world, messageIO)
     }
