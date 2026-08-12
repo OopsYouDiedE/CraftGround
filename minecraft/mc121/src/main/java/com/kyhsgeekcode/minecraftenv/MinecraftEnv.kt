@@ -27,6 +27,7 @@ import net.minecraft.client.MinecraftClient
 import net.minecraft.client.MinecraftClient.IS_SYSTEM_MAC
 import net.minecraft.client.gui.screen.DeathScreen
 import net.minecraft.client.gui.screen.ingame.InventoryScreen
+import net.minecraft.client.gui.DrawContext
 import net.minecraft.client.network.ClientPlayerEntity
 import net.minecraft.client.render.BackgroundRenderer
 import net.minecraft.client.world.ClientWorld
@@ -617,6 +618,14 @@ class MinecraftEnv :
                 render(client)
                 RenderSystem.replayQueue()
                 org.lwjgl.opengl.GL11.glFinish()
+                val screen = client.currentScreen
+                if (screen != null) {
+                    val consumers = client.bufferBuilders.entityVertexConsumers
+                    val context = DrawContext(client, consumers)
+                    screen.renderWithTooltip(context, MouseInfo.mouseX.toInt(), MouseInfo.mouseY.toInt(), client.renderTickCounter.getLastDuration())
+                    context.draw()
+                    consumers.draw()
+                }
                 imageByteString1 =
                     FramebufferCapturer.captureFramebuffer(
                         buffer.colorAttachment,
