@@ -78,6 +78,12 @@ enum class IOPhase {
     SENT_OBSERVATION_SHOULD_READ_ACTION,
 }
 
+enum class StepPhase {
+    WAITING_ACTION,
+    ACTION_APPLIED,
+    CLIENT_TICK_COMPLETED,
+}
+
 val chatList = mutableListOf<ChatMessageRecord>()
 
 class MinecraftEnv :
@@ -85,11 +91,6 @@ class MinecraftEnv :
     CommandExecutor {
     companion object {
         private var activeInstance: MinecraftEnv? = null
-
-        @JvmStatic
-        fun onRenderStart() {
-            activeInstance?.readActionBeforeRender()
-        }
 
         @JvmStatic
         fun onRenderComplete() {
@@ -128,7 +129,7 @@ class MinecraftEnv :
     private var pendingObservation: Pair<MessageIO, ClientWorld>? = null
     private lateinit var initializer: EnvironmentInitializer
     private lateinit var messageIO: MessageIO
-    private var waitingForPostActionClientTick = false
+    private var stepPhase = StepPhase.WAITING_ACTION
 
     override fun onInitialize() {
         activeInstance = this
@@ -233,7 +234,6 @@ class MinecraftEnv :
         this.messageIO = messageIO
         ClientTickEvents.START_CLIENT_TICK.register(
             ClientTickEvents.StartTick { client: MinecraftClient ->
-                waitingForPostActionClientTick = false
                 printWithTime("Start Client tick")
                 csvLogger.profileStartPrint("Minecraft_env/onInitialize/ClientTick")
                 initializer.onClientTick(client)
@@ -251,8 +251,17 @@ class MinecraftEnv :
                 }
                 if (resetPhase != ResetPhase.END_RESET) {
                     client.world?.let { world -> onStartWorldTick(initializer, world, messageIO) }
+                } else {
+                    readActionAtClientTickStart(client)
                 }
                 csvLogger.profileEndPrint("Minecraft_env/onInitialize/ClientTick")
+            },
+        )
+        ClientTickEvents.END_CLIENT_TICK.register(
+            ClientTickEvents.EndTick {
+                if (stepPhase == StepPhase.ACTION_APPLIED) {
+                    stepPhase = StepPhase.CLIENT_TICK_COMPLETED
+                }
             },
         )
         ClientTickEvents.END_WORLD_TICK.register(
@@ -330,23 +339,29 @@ class MinecraftEnv :
 
     private fun sendPendingObservation() {
         val pending = pendingObservation ?: return
-        if (waitingForPostActionClientTick) return
+        if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION &&
+            stepPhase != StepPhase.CLIENT_TICK_COMPLETED
+        ) return
         pendingObservation = null
         sendObservation(pending.first, pending.second)
+        if (ioPhase == IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION) {
+            stepPhase = StepPhase.WAITING_ACTION
+        }
     }
 
-    private fun readActionBeforeRender() {
+    private fun readActionAtClientTickStart(client: MinecraftClient) {
         if (!::initializer.isInitialized || !::messageIO.isInitialized) return
         if (pendingObservation != null) return
+        if (stepPhase != StepPhase.WAITING_ACTION) return
         if (resetPhase != ResetPhase.END_RESET) return
         if (ioPhase != IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION &&
             ioPhase != IOPhase.GOT_INITIAL_ENVIRONMENT_SENT_OBSERVATION_SKIP_SEND_OBSERVATION
         ) return
-        val world = MinecraftClient.getInstance().world ?: return
+        val world = client.world ?: return
         onStartWorldTick(initializer, world, messageIO)
         if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
             pendingObservation = messageIO to world
-            waitingForPostActionClientTick = true
+            stepPhase = StepPhase.ACTION_APPLIED
         }
     }
 
