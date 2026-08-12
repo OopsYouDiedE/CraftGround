@@ -284,7 +284,8 @@ class MinecraftEnv :
                 } else {
                     csvLogger.log("Real send observation; $ioPhase")
                     pendingObservation = messageIO to world
-                    pendingRenderCompletions = 2
+                    pendingRenderCompletions =
+                        if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) 2 else 1
                 }
                 csvLogger.profileEndPrint(
                     "Minecraft_env/onInitialize/EndWorldTick/SendObservation",
