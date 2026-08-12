@@ -104,7 +104,10 @@ class MinecraftEnv :
 
         @JvmStatic
         fun onScreenRendered() {
-            activeInstance?.screenRenderedSequence = activeInstance?.renderSequence ?: -1L
+            activeInstance?.let { instance ->
+                instance.screenRenderedSequence = instance.renderSequence
+                instance.sendPendingObservation()
+            }
         }
 
         @JvmStatic
