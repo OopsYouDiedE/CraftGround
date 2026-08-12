@@ -586,7 +586,7 @@ class MinecraftEnv :
                     "New left position: ${left.x}, ${left.y}, ${left.z} ${player.prevX}, ${player.prevY}, ${player.prevZ}",
                 )
                 // (client as ClientRenderInvoker).invokeRender(true)
-                (client as ClientRenderInvoker).invokeRender(true)
+                render(client)
                 imageByteString1 =
                     FramebufferCapturer.captureFramebuffer(
                         buffer.colorAttachment,
@@ -649,7 +649,7 @@ class MinecraftEnv :
                         MouseInfo.mouseY * client.window.scaledHeight.toDouble() /
                             client.window.height.toDouble()
                     ).toInt()
-                render(client)
+                (client as ClientRenderInvoker).invokeRender(true)
                 imageByteString1 =
                     FramebufferCapturer.captureFramebuffer(
                         buffer.colorAttachment,
