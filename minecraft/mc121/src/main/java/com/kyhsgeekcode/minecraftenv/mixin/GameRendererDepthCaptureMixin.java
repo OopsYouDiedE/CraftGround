@@ -2,7 +2,6 @@ package com.kyhsgeekcode.minecraftenv.mixin;
 
 import com.kyhsgeekcode.minecraftenv.FramebufferCapturer;
 import com.kyhsgeekcode.minecraftenv.GameRendererDepthCaptureMixinGetterInterface;
-import com.kyhsgeekcode.minecraftenv.MinecraftEnv;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.RenderTickCounter;
@@ -20,15 +19,6 @@ import static com.kyhsgeekcode.minecraftenv.PrintWithTimeKt.printWithTime;
 public class GameRendererDepthCaptureMixin implements GameRendererDepthCaptureMixinGetterInterface {
     @Unique
     private float[] lastDepthBuffer = null;
-
-    @Inject(method = "render", at = @At("HEAD"))
-    private void readActionBeforeScreenRender(
-            RenderTickCounter tickCounter,
-            boolean tick,
-            CallbackInfo callbackInfo
-    ) {
-        MinecraftEnv.onRenderStart();
-    }
 
     @Inject(
             method = "renderWorld",

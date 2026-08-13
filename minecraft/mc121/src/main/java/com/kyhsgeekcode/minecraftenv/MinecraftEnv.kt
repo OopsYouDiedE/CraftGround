@@ -26,7 +26,6 @@ import net.minecraft.block.BlockState
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.MinecraftClient.IS_SYSTEM_MAC
 import net.minecraft.client.gui.screen.DeathScreen
-import net.minecraft.client.gui.screen.ingame.InventoryScreen
 import net.minecraft.client.network.ClientPlayerEntity
 import net.minecraft.client.render.BackgroundRenderer
 import net.minecraft.client.world.ClientWorld
@@ -44,19 +43,19 @@ import net.minecraft.util.WorldSavePath
 import net.minecraft.util.function.BooleanBiFunction
 import net.minecraft.util.math.BlockPos
 import net.minecraft.util.math.Box
-import org.lwjgl.glfw.GLFW.GLFW_KEY_E
 import net.minecraft.util.math.Vec3d
 import net.minecraft.util.shape.VoxelShapes
 import net.minecraft.world.biome.source.BiomeCoords
 import java.io.IOException
 import java.net.InetSocketAddress
-import java.net.SocketTimeoutException
 import java.net.StandardProtocolFamily
 import java.net.UnixDomainSocketAddress
 import java.nio.channels.ServerSocketChannel
 import java.nio.channels.SocketChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.locks.Condition
+import java.util.concurrent.locks.ReentrantLock
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.deleteRecursively
 import kotlin.math.cos
@@ -87,13 +86,11 @@ class MinecraftEnv :
         private var activeInstance: MinecraftEnv? = null
 
         @JvmStatic
-        fun onRenderStart() {
-            activeInstance?.readActionBeforeRender()
-        }
+        fun beforeClientTick(): Boolean = activeInstance?.consumeActionBeforeClientTick() ?: true
 
         @JvmStatic
         fun onRenderComplete() {
-            activeInstance?.sendPendingObservation()
+            activeInstance?.captureAndSendPendingObservation()
         }
 
         @JvmStatic
@@ -126,9 +123,16 @@ class MinecraftEnv :
     private var ioPhase = IOPhase.BEGINNING
     private var useSharedMemory = false
     private var pendingObservation: Pair<MessageIO, ClientWorld>? = null
+    private var pendingCapturedImage: ByteString? = null
     private lateinit var initializer: EnvironmentInitializer
     private lateinit var messageIO: MessageIO
-    private var rendersUntilObservation = 0
+    private val actionLock = ReentrantLock()
+    private val actionRequested: Condition = actionLock.newCondition()
+    private val actionReady: Condition = actionLock.newCondition()
+    private var shouldReadAction = false
+    private var pendingAction: ActionSpaceMessageV2? = null
+    private var actionReaderTerminating = false
+    private var actionReaderThread: Thread? = null
 
     override fun onInitialize() {
         activeInstance = this
@@ -231,6 +235,7 @@ class MinecraftEnv :
         csvLogger.log("Initial environment read; $ioPhase $resetPhase")
         initializer = EnvironmentInitializer(initialEnvironment, csvLogger)
         this.messageIO = messageIO
+        startActionReader()
         ClientTickEvents.START_CLIENT_TICK.register(
             ClientTickEvents.StartTick { client: MinecraftClient ->
                 printWithTime("Start Client tick")
@@ -329,25 +334,145 @@ class MinecraftEnv :
 
     private fun sendPendingObservation() {
         val pending = pendingObservation ?: return
-        rendersUntilObservation--
-        if (rendersUntilObservation > 0) return
+        if (initialEnvironment.eyeDistance <= 0 && pendingCapturedImage == null) return
         pendingObservation = null
-        sendObservation(pending.first, pending.second)
+        val capturedImage = pendingCapturedImage
+        pendingCapturedImage = null
+        sendObservation(pending.first, pending.second, capturedImage)
     }
 
-    private fun readActionBeforeRender() {
-        if (!::initializer.isInitialized || !::messageIO.isInitialized) return
-        if (pendingObservation != null) return
-        if (resetPhase != ResetPhase.END_RESET) return
+    private fun captureAndSendPendingObservation() {
+        capturePendingFrame()
+        sendPendingObservation()
+    }
+
+    private fun capturePendingFrame() {
+        if (pendingObservation == null || pendingCapturedImage != null) return
+        if (initialEnvironment.eyeDistance > 0) return
+        val client = MinecraftClient.getInstance()
+        if (client.player == null || !FramebufferCapturer.checkGLEW()) return
+        val buffer = client.framebuffer
+        if (buffer.textureWidth <= 0 || buffer.textureHeight <= 0 || buffer.fbo <= 0) return
+        pendingCapturedImage =
+            FramebufferCapturer.captureFramebuffer(
+                buffer.colorAttachment,
+                buffer.fbo,
+                buffer.textureWidth,
+                buffer.textureHeight,
+                initialEnvironment.imageSizeX,
+                initialEnvironment.imageSizeY,
+                initialEnvironment.screenEncodingMode,
+                false,
+                MouseInfo.showCursor,
+                MouseInfo.mouseX.toInt(),
+                MouseInfo.mouseY.toInt(),
+            )
+    }
+
+    private fun startActionReader() {
+        actionReaderThread =
+            Thread(
+                {
+                    while (true) {
+                        actionLock.lock()
+                        try {
+                            while (!actionReaderTerminating && !shouldReadAction) {
+                                actionRequested.await()
+                            }
+                            if (actionReaderTerminating) return@Thread
+                            shouldReadAction = false
+                        } catch (e: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                            return@Thread
+                        } finally {
+                            actionLock.unlock()
+                        }
+
+                        try {
+                            csvLogger.profileStartPrint("Minecraft_env/ActionReader/ReadAction")
+                            val action = messageIO.readAction()
+                            csvLogger.profileEndPrint("Minecraft_env/ActionReader/ReadAction")
+                            actionLock.lock()
+                            try {
+                                pendingAction = action
+                                actionReady.signalAll()
+                            } finally {
+                                actionLock.unlock()
+                            }
+                        } catch (e: IOException) {
+                            terminateActionPipeline()
+                            tickSynchronizer.terminate()
+                            e.printStackTrace()
+                            MinecraftClient.getInstance().scheduleStop()
+                            return@Thread
+                        } catch (e: Exception) {
+                            terminateActionPipeline()
+                            tickSynchronizer.terminate()
+                            e.printStackTrace()
+                            MinecraftClient.getInstance().scheduleStop()
+                            return@Thread
+                        }
+                    }
+                },
+                "CraftGround-ActionReader",
+            ).apply {
+                isDaemon = true
+                start()
+            }
+    }
+
+    private fun requestNextAction() {
+        actionLock.lock()
+        try {
+            check(pendingAction == null) { "Cannot request another action while one is pending" }
+            shouldReadAction = true
+            actionRequested.signalAll()
+        } finally {
+            actionLock.unlock()
+        }
+    }
+
+    private fun awaitNextAction(): ActionSpaceMessageV2? {
+        actionLock.lock()
+        try {
+            while (!actionReaderTerminating && pendingAction == null) {
+                actionReady.await()
+            }
+            if (actionReaderTerminating) return null
+            return pendingAction.also { pendingAction = null }
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return null
+        } finally {
+            actionLock.unlock()
+        }
+    }
+
+    private fun terminateActionPipeline() {
+        actionLock.lock()
+        try {
+            actionReaderTerminating = true
+            actionRequested.signalAll()
+            actionReady.signalAll()
+        } finally {
+            actionLock.unlock()
+        }
+    }
+
+    private fun consumeActionBeforeClientTick(): Boolean {
+        if (!::initializer.isInitialized || !::messageIO.isInitialized) return true
+        if (pendingObservation != null) return false
+        if (resetPhase != ResetPhase.END_RESET) return true
         if (ioPhase != IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION &&
             ioPhase != IOPhase.GOT_INITIAL_ENVIRONMENT_SENT_OBSERVATION_SKIP_SEND_OBSERVATION
-        ) return
-        val world = MinecraftClient.getInstance().world ?: return
-        onStartWorldTick(initializer, world, messageIO)
-        if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
-            pendingObservation = messageIO to world
-            rendersUntilObservation = 1
-        }
+        ) return true
+        val world = MinecraftClient.getInstance().world ?: return true
+        val action = awaitNextAction() ?: return false
+        applyPreparedAction(initializer, world, action)
+        ioPhase = IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION
+        pendingObservation = messageIO to world
+        pendingCapturedImage = null
+        return true
     }
 
     private fun onStartWorldTick(
@@ -401,42 +526,27 @@ class MinecraftEnv :
                 csvLogger.log("Reset end")
             }
         }
-        try {
-            csvLogger.log("Will Read action")
-            csvLogger.profileStartPrint("Minecraft_env/onInitialize/ClientWorldTick/ReadAction")
-            val action = messageIO.readAction()
-            csvLogger.profileEndPrint("Minecraft_env/onInitialize/ClientWorldTick/ReadAction")
-            ioPhase = IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION
-            csvLogger.log("Read action done; $ioPhase")
-            skipSync = false
-            val commands = action.commandsList
+    }
 
-            if (commands.isNotEmpty()) {
-                for (command in commands) {
-                    if (handleCommand(command, client, player)) {
-                        return
-                    }
-                }
-            }
-            if (player.isDead) {
-                return
-            } else if (client.currentScreen is DeathScreen) {
-                sendSetScreenNull(client)
-            }
-            if (applyAction(action, player, client)) return
-        } catch (e: SocketTimeoutException) {
-            printWithTime("Timeout")
-            csvLogger.log("Timeout")
-        } catch (e: IOException) {
-            tickSynchronizer.terminate()
-            // release lock
-            e.printStackTrace()
-            exitProcess(-1)
-        } catch (e: Exception) {
-            tickSynchronizer.terminate()
-            e.printStackTrace()
-            exitProcess(-2)
+    private fun applyPreparedAction(
+        initializer: EnvironmentInitializer,
+        world: ClientWorld,
+        action: ActionSpaceMessageV2,
+    ) {
+        val client = MinecraftClient.getInstance()
+        val player = client.player ?: return
+        soundListener!!.onTick()
+        initializer.onWorldTick(client.server, client.inGameHud.chatHud, this, emptyList())
+        skipSync = false
+
+        for (command in action.commandsList) {
+            if (handleCommand(command, client, player)) return
         }
+        if (player.isDead) return
+        if (client.currentScreen is DeathScreen) {
+            sendSetScreenNull(client)
+        }
+        applyAction(action, player, client)
     }
 
     private fun sendSetScreenNull(client: MinecraftClient) {
@@ -515,17 +625,10 @@ class MinecraftEnv :
         if (actionDict.cameraYaw != 0.0f || actionDict.cameraPitch != 0.0f) {
             val dy = actionDict.cameraPitch * 20.0 / 3
             val dx = actionDict.cameraYaw * 20.0 / 3
-            MouseInfo.moveMouseBy(dx.toInt(), dy.toInt())
+            MouseInfo.moveMouseBy(dx, dy)
         }
 
-        // Inventory is opened immediately because this action is read after Minecraft's normal
-        // input phase. Sending a GLFW E callback here postpones the screen transition to a later
-        // client tick and returns stale framebuffer observations.
-        val inventoryWasPressed = actionDict.inventory && !KeyboardInfo.isKeyPressed(GLFW_KEY_E)
-        if (inventoryWasPressed && client.currentScreen == null) {
-            client.setScreen(InventoryScreen(player))
-        }
-        KeyboardInfo.onAction(actionDict, handleInventory = false)
+        KeyboardInfo.onAction(actionDict)
         val currentScreen = client.currentScreen
         if (currentScreen != null && currentScreen is DeathScreen) {
             // Disable disconnect button
@@ -541,6 +644,7 @@ class MinecraftEnv :
     private fun sendObservation(
         messageIO: MessageIO,
         world: ClientWorld,
+        capturedImage: ByteString? = null,
     ) {
         printWithTime("send Observation")
         csvLogger.log("send Observation")
@@ -620,19 +724,20 @@ class MinecraftEnv :
                 )
                 // (client as ClientRenderInvoker).invokeRender(true)
                 imageByteString1 =
-                    FramebufferCapturer.captureFramebuffer(
-                        buffer.colorAttachment,
-                        buffer.fbo,
-                        buffer.textureWidth,
-                        buffer.textureHeight,
-                        initialEnvironment.imageSizeX,
-                        initialEnvironment.imageSizeY,
-                        initialEnvironment.screenEncodingMode,
-                        false,
-                        MouseInfo.showCursor, // FramebufferCapturer.isExtensionAvailable
-                        MouseInfo.mouseX.toInt(),
-                        MouseInfo.mouseY.toInt(),
-                    )
+                    capturedImage
+                        ?: FramebufferCapturer.captureFramebuffer(
+                            buffer.colorAttachment,
+                            buffer.fbo,
+                            buffer.textureWidth,
+                            buffer.textureHeight,
+                            initialEnvironment.imageSizeX,
+                            initialEnvironment.imageSizeY,
+                            initialEnvironment.screenEncodingMode,
+                            false,
+                            MouseInfo.showCursor, // FramebufferCapturer.isExtensionAvailable
+                            MouseInfo.mouseX.toInt(),
+                            MouseInfo.mouseY.toInt(),
+                        )
                 player.prevX = right.x
                 player.prevY = right.y
                 player.prevZ = right.z
@@ -681,19 +786,20 @@ class MinecraftEnv :
                             client.window.height.toDouble()
                     ).toInt()
                 imageByteString1 =
-                    FramebufferCapturer.captureFramebuffer(
-                        buffer.colorAttachment,
-                        buffer.fbo,
-                        buffer.textureWidth,
-                        buffer.textureHeight,
-                        initialEnvironment.imageSizeX,
-                        initialEnvironment.imageSizeY,
-                        initialEnvironment.screenEncodingMode,
-                        false,
-                        MouseInfo.showCursor, // FramebufferCapturer.isExtensionAvailable
-                        MouseInfo.mouseX.toInt(),
-                        MouseInfo.mouseY.toInt(),
-                    )
+                    capturedImage
+                        ?: FramebufferCapturer.captureFramebuffer(
+                            buffer.colorAttachment,
+                            buffer.fbo,
+                            buffer.textureWidth,
+                            buffer.textureHeight,
+                            initialEnvironment.imageSizeX,
+                            initialEnvironment.imageSizeY,
+                            initialEnvironment.screenEncodingMode,
+                            false,
+                            MouseInfo.showCursor, // FramebufferCapturer.isExtensionAvailable
+                            MouseInfo.mouseX.toInt(),
+                            MouseInfo.mouseY.toInt(),
+                        )
                 // ByteString.copyFrom(image1ByteArray)
                 imageByteString2 = ByteString.EMPTY // ByteString.copyFrom(image1ByteArray)
                 csvLogger.profileEndPrint(
@@ -962,17 +1068,21 @@ class MinecraftEnv :
                             }
                     }
                 }
-            if (ioPhase == IOPhase.GOT_INITIAL_ENVIRONMENT_SHOULD_SEND_OBSERVATION) {
+            val shouldRequestAction =
+                if (ioPhase == IOPhase.GOT_INITIAL_ENVIRONMENT_SHOULD_SEND_OBSERVATION) {
                 //                csvLogger.log("Sent observation; $ioPhase")
-                ioPhase = IOPhase.GOT_INITIAL_ENVIRONMENT_SENT_OBSERVATION_SKIP_SEND_OBSERVATION
+                    ioPhase = IOPhase.GOT_INITIAL_ENVIRONMENT_SENT_OBSERVATION_SKIP_SEND_OBSERVATION
                 //                csvLogger.log("Sent observation; now $ioPhase")
-            } else if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
+                    true
+                } else if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
                 //                csvLogger.log("Sent observation; $ioPhase")
-                ioPhase = IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION
+                    ioPhase = IOPhase.SENT_OBSERVATION_SHOULD_READ_ACTION
                 //                csvLogger.log("Sent observation; now $ioPhase")
-            } else {
+                    true
+                } else {
                 //                csvLogger.log("Sent observation; $ioPhase good.")
-            }
+                    false
+                }
             csvLogger.profileEndPrint(
                 "Minecraft_env/onInitialize/EndWorldTick/SendObservation/Prepare/Message",
             )
@@ -980,11 +1090,15 @@ class MinecraftEnv :
                 "Minecraft_env/onInitialize/EndWorldTick/SendObservation/Write",
             )
             messageIO.writeObservation(observationSpaceMessage)
+            if (shouldRequestAction) {
+                requestNextAction()
+            }
             csvLogger.profileEndPrint(
                 "Minecraft_env/onInitialize/EndWorldTick/SendObservation/Write",
             )
         } catch (e: IOException) {
             e.printStackTrace()
+            terminateActionPipeline()
             tickSynchronizer.terminate()
             client.scheduleStop()
 

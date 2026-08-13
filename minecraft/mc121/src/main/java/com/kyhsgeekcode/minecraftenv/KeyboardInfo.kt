@@ -1,6 +1,7 @@
 package com.kyhsgeekcode.minecraftenv
 
 import com.kyhsgeekcode.minecraftenv.proto.ActionSpace
+import net.minecraft.client.MinecraftClient
 import org.lwjgl.glfw.GLFW.GLFW_KEY_1
 import org.lwjgl.glfw.GLFW.GLFW_KEY_2
 import org.lwjgl.glfw.GLFW.GLFW_KEY_3
@@ -21,7 +22,6 @@ import org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE
 import org.lwjgl.glfw.GLFW.GLFW_KEY_W
 import org.lwjgl.glfw.GLFW.GLFW_PRESS
 import org.lwjgl.glfw.GLFW.GLFW_RELEASE
-import org.lwjgl.glfw.GLFW.GLFW_REPEAT
 import org.lwjgl.glfw.GLFWCharModsCallbackI
 import org.lwjgl.glfw.GLFWKeyCallbackI
 
@@ -82,24 +82,18 @@ object KeyboardInfo {
                 "Hotbar9" to actionDict.hotbar9,
             )
 
-        // 각 키의 상태를 비교하여 변화가 있으면 keyCallback 호출
+        val client = MinecraftClient.getInstance()
         for ((key, glfwKey) in keyMappings) {
             val previousState = currentState[glfwKey] ?: false
             val currentState = actions[key] ?: false
 
             if (!previousState && currentState) {
-                // 키가 처음 눌렸을 때 GLFW_PRESS 호출
-                keyCallback?.invoke(handle, glfwKey, 0, GLFW_PRESS, 0)
-            } else if (previousState && currentState) {
-                // 키가 계속 눌린 상태라면 GLFW_REPEAT 호출
-                keyCallback?.invoke(handle, glfwKey, 0, GLFW_REPEAT, 0)
+                this.currentState[glfwKey] = true
+                client.keyboard.onKey(handle, glfwKey, 0, GLFW_PRESS, 0)
             } else if (previousState && !currentState) {
-                // 키가 떼졌을 때 GLFW_RELEASE 호출
-                keyCallback?.invoke(handle, glfwKey, 0, GLFW_RELEASE, 0)
+                this.currentState[glfwKey] = false
+                client.keyboard.onKey(handle, glfwKey, 0, GLFW_RELEASE, 0)
             }
-
-            // 현재 상태 갱신
-            this.currentState[glfwKey] = currentState
         }
     }
 

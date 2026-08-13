@@ -11,4 +11,7 @@ public interface MouseXYAccessor {
 
   @Accessor("y")
   void setY(double y);
+
+  @Accessor("hasResolutionChanged")
+  void setHasResolutionChanged(boolean hasResolutionChanged);
 }
