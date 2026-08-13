@@ -346,7 +346,7 @@ class MinecraftEnv :
         onStartWorldTick(initializer, world, messageIO)
         if (ioPhase == IOPhase.READ_ACTION_SHOULD_SEND_OBSERVATION) {
             pendingObservation = messageIO to world
-            rendersUntilObservation = 2
+            rendersUntilObservation = 1
         }
     }
 
@@ -641,7 +641,6 @@ class MinecraftEnv :
                     "New right position: ${right.x}, ${right.y}, ${right.z} ${player.prevX}, ${player.prevY}, ${player.prevZ}",
                 )
                 //                (client as ClientRenderInvoker).invokeRender(true)
-                render(client)
                 imageByteString2 =
                     FramebufferCapturer.captureFramebuffer(
                         buffer.colorAttachment,
@@ -681,7 +680,6 @@ class MinecraftEnv :
                         MouseInfo.mouseY * client.window.scaledHeight.toDouble() /
                             client.window.height.toDouble()
                     ).toInt()
-                render(client)
                 imageByteString1 =
                     FramebufferCapturer.captureFramebuffer(
                         buffer.colorAttachment,
