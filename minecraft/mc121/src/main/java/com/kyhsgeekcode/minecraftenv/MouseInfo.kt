@@ -10,13 +10,9 @@ import org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT
 import org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_RIGHT
 import org.lwjgl.glfw.GLFW.GLFW_PRESS
 import org.lwjgl.glfw.GLFW.GLFW_RELEASE
-import org.lwjgl.glfw.GLFWCursorPosCallbackI
-import org.lwjgl.glfw.GLFWMouseButtonCallbackI
 
 object MouseInfo {
     var handle: Long = 0
-    var cursorPosCallback: GLFWCursorPosCallbackI? = null
-    var mouseButtonCallback: GLFWMouseButtonCallbackI? = null
     var mouseX: Double = 0.0
     var mouseY: Double = 0.0
     var showCursor: Boolean = false
@@ -59,14 +55,12 @@ object MouseInfo {
     ) {
         mouseX = x
         mouseY = y
-        // Do not call the callback
         val client = MinecraftClient.getInstance()
         (client?.mouse as? MouseXYAccessor)?.let { mouse ->
             mouse.setX(x)
             mouse.setY(y)
             mouse.setHasResolutionChanged(false)
         }
-//        println("Set mouse pos to $x, $y")
     }
 
     fun setCursorShown(show: Boolean) {

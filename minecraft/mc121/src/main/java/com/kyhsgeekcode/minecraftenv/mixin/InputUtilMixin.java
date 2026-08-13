@@ -20,8 +20,6 @@ public class InputUtilMixin {
       GLFWMouseButtonCallbackI mouseButtonCallback,
       GLFWScrollCallbackI scrollCallback,
       GLFWDropCallbackI dropCallback) {
-    MouseInfo.INSTANCE.setCursorPosCallback(cursorPosCallback);
-    MouseInfo.INSTANCE.setMouseButtonCallback(mouseButtonCallback);
     MouseInfo.INSTANCE.setHandle(handle);
   }
 
@@ -34,8 +32,6 @@ public class InputUtilMixin {
   @Overwrite
   public static void setKeyboardCallbacks(
       long handle, GLFWKeyCallbackI keyCallback, GLFWCharModsCallbackI charModsCallback) {
-    KeyboardInfo.INSTANCE.setKeyCallback(keyCallback);
-    KeyboardInfo.INSTANCE.setCharModsCallback(charModsCallback);
     KeyboardInfo.INSTANCE.setHandle(handle);
   }
 }

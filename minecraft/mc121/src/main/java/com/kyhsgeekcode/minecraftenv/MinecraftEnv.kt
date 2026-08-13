@@ -132,7 +132,6 @@ class MinecraftEnv :
     private var shouldReadAction = false
     private var pendingAction: ActionSpaceMessageV2? = null
     private var actionReaderTerminating = false
-    private var actionReaderThread: Thread? = null
 
     override fun onInitialize() {
         activeInstance = this
@@ -370,8 +369,7 @@ class MinecraftEnv :
     }
 
     private fun startActionReader() {
-        actionReaderThread =
-            Thread(
+        Thread(
                 {
                     while (true) {
                         actionLock.lock()
@@ -415,10 +413,10 @@ class MinecraftEnv :
                     }
                 },
                 "CraftGround-ActionReader",
-            ).apply {
-                isDaemon = true
-                start()
-            }
+        ).apply {
+            isDaemon = true
+            start()
+        }
     }
 
     private fun requestNextAction() {
