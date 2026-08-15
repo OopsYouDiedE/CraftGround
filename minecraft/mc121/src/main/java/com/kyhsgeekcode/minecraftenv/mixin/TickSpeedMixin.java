@@ -1,5 +1,6 @@
 package com.kyhsgeekcode.minecraftenv.mixin;
 
+import com.kyhsgeekcode.minecraftenv.ControlMode;
 import net.minecraft.client.render.RenderTickCounter;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -15,6 +16,9 @@ public class TickSpeedMixin {
               target =
                   "Lnet/minecraft/client/render/RenderTickCounter$Dynamic;beginRenderTick(J)I"))
   private int beginRenderTick(RenderTickCounter.Dynamic renderTickCounter, long timeMillis) {
+    if (ControlMode.isHuman()) {
+      return ((RenderTickCounterAccessor) renderTickCounter).invokeBeginRenderTick(timeMillis);
+    }
     ((RenderTickCounterAccessor) renderTickCounter)
         .setLastFrameDuration(1); // (float)(timeMillis - this.prevTimeMillis) / this.tickTime;
     ((RenderTickCounterAccessor) renderTickCounter).setPrevTimeMillis(timeMillis);

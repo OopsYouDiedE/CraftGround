@@ -613,7 +613,9 @@ class EnvironmentInitializer(
         val myCommandExecutor = { player: ClientPlayerEntity, c: String ->
             commandExecutor.runCommand(player, c)
         }
-        setUnlimitedTPS(myCommandExecutor)
+        if (!ControlMode.isHuman()) {
+            setUnlimitedTPS(myCommandExecutor)
+        }
         for (command in initialEnvironment.initialExtraCommandsList) {
             commandExecutor.runCommand(this.player, "/$command")
         }
