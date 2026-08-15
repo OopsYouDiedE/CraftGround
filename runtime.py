@@ -258,6 +258,7 @@ def create_environment(
     request_raycast: bool = False,
     requires_surrounding_blocks: bool = False,
     verbose: bool = False,
+    control_mode: str = "agent",
 ) -> Any:
     """创建一个 CraftGround 环境实例。
 
@@ -283,6 +284,7 @@ def create_environment(
         requires_surrounding_blocks: 是否在观察里带玩家周围 27 个方块。**默认关闭**，
             关闭时 `surrounding_blocks` 恒为空列表。
         verbose: 是否打开 CraftGround 日志。
+        control_mode: `agent` 使用锁步动作控制；`human` 完整透传窗口键鼠。
 
     Returns:
         `CraftGroundEnvironment` 实例，附带 `tao_runtime_path` 属性。
@@ -333,6 +335,7 @@ def create_environment(
         use_shared_memory=use_shared_memory,
         cleanup_world=not level_display_name_to_play,
         verbose=verbose,
+        control_mode=control_mode,
     )
     environment.tao_runtime_path = str(resolved)
     return environment

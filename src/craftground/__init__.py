@@ -27,6 +27,7 @@ def make(
     verbose_gradle=False,
     profile_jni=False,
     no_threaded_optimizations=True,
+    control_mode: str = "agent",
 ) -> CraftGroundEnvironment:
     if not initial_env_config:
         initial_env_config = InitialEnvironmentConfig()
@@ -51,4 +52,5 @@ def make(
         verbose_gradle=verbose_gradle,
         use_shared_memory=use_shared_memory,
         profile_jni=profile_jni,
+        control_mode=control_mode,
     )

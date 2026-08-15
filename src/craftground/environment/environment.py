@@ -70,7 +70,10 @@ class CraftGroundEnvironment(gym.Env):
         verbose_jvm: bool = False,
         profile: bool = False,
         profile_jni: bool = False,
+        control_mode: str = "agent",
     ):
+        if control_mode not in {"agent", "human"}:
+            raise ValueError("control_mode must be 'agent' or 'human'")
         self.action_space_version = action_space_version
         self.action_space = declare_action_space(action_space_version)
         self.observation_space = declare_observation_space(
@@ -97,6 +100,7 @@ class CraftGroundEnvironment(gym.Env):
         self.verbose_jvm = verbose_jvm
         self.profile = profile
         self.profile_jni = profile_jni
+        self.control_mode = control_mode
 
         self.render_alternating_eyes = render_alternating_eyes
         self.render_alternating_eyes_counter = 0
@@ -243,6 +247,7 @@ class CraftGroundEnvironment(gym.Env):
         my_env["PORT"] = str(self.ipc.port)
         my_env["USE_SHARED_MEMORY"] = str(int(self.use_shared_memory))
         my_env["VERBOSE"] = str(int(self.verbose_jvm))
+        my_env["CRAFTGROUND_CONTROL_MODE"] = self.control_mode
         if self.track_native_memory:
             my_env["CRAFTGROUND_JVM_NATIVE_TRACKING"] = "detail"
         if self.native_debug:

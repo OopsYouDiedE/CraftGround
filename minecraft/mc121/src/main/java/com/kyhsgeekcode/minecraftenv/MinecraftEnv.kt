@@ -234,7 +234,9 @@ class MinecraftEnv :
         csvLogger.log("Initial environment read; $ioPhase $resetPhase")
         initializer = EnvironmentInitializer(initialEnvironment, csvLogger)
         this.messageIO = messageIO
-        startActionReader()
+        if (!ControlMode.isHuman()) {
+            startActionReader()
+        }
         ClientTickEvents.START_CLIENT_TICK.register(
             ClientTickEvents.StartTick { client: MinecraftClient ->
                 printWithTime("Start Client tick")
@@ -260,6 +262,9 @@ class MinecraftEnv :
         )
         ClientTickEvents.END_WORLD_TICK.register(
             ClientTickEvents.EndWorldTick { world: ClientWorld ->
+                if (ControlMode.isHuman() && ioPhase != IOPhase.GOT_INITIAL_ENVIRONMENT_SHOULD_SEND_OBSERVATION) {
+                    return@EndWorldTick
+                }
                 // allow server to start tick
                 tickSynchronizer.notifyServerTickStart()
                 // wait until server tick ends
@@ -458,6 +463,7 @@ class MinecraftEnv :
     }
 
     private fun consumeActionBeforeClientTick(): Boolean {
+        if (ControlMode.isHuman()) return true
         if (!::initializer.isInitialized || !::messageIO.isInitialized) return true
         if (pendingObservation != null) return false
         if (resetPhase != ResetPhase.END_RESET) return true
@@ -1088,7 +1094,7 @@ class MinecraftEnv :
                 "Minecraft_env/onInitialize/EndWorldTick/SendObservation/Write",
             )
             messageIO.writeObservation(observationSpaceMessage)
-            if (shouldRequestAction) {
+            if (shouldRequestAction && !ControlMode.isHuman()) {
                 requestNextAction()
             }
             csvLogger.profileEndPrint(
