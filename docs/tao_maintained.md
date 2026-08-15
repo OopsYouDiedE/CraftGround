@@ -17,10 +17,14 @@ required by `tao-not-42`.
 - The mc121 runtime package vendors the native capture sources that its CMake
   project compiles. This keeps wheels and Git subdirectory installations
   independent of the original repository checkout.
+- TaoNot42-specific environment modules live at the repository root. When this
+  repository is checked out at `TaoNot42/envs/craftground`, they form the
+  `envs.craftground` package and use `minecraft/mc121` from the same checkout.
 
-The fork packages use PEP 440 local versions `2.7.8+tao.1` and
-`0.1.0+tao.1`. Consumers must still pin an exact Git commit; these version
-labels identify the fork but do not replace source locking.
+The fork packages use PEP 440 local versions `2.7.8+tao.2` and
+`0.1.0+tao.2`. TaoNot42 pins the exact Git commit through its CraftGround
+submodule; these version labels identify the fork but do not replace source
+locking.
 
 ## Dependency constraints
 

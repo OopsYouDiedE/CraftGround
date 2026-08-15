@@ -1,0 +1,50 @@
+# CraftGround 键鼠映射表。协议 v1：位串 12 位，连续槽位 6 个。
+#
+# 目标是 v1 而非 v2，因为 CraftGround 的 V2_MINERL_HUMAN 动作字典没有任何绝对坐标字段，
+# 只有 camera_yaw/camera_pitch 两个相对增量。v2 的存在理由是那 8 个绝对坐标槽位，落不到
+# 后端字段上就是 24 个恒零整数。这里是把键鼠映射到手柄语义，因此编译到 v1。
+#
+# 依据是目标槽位的语义类别而非物理相似度。鼠标左右键映射到扳机而非位串，因为简化协议已把
+# 主要与次要动作定为连续量；映射为位串会使键鼠数据与手柄录制数据落在不同槽位，破坏同一份
+# 行为克隆课程的一致性。
+#
+# MouseMoveX/Y 后的常量是灵敏度，表示轴值满值对应的每 tick 视角度数。OpenAI VPT 的
+# 相机动作使用 11 桶 μ-law 量化，最大值是 10 度；模型适配器先按官方参数解码，再除以
+# 10 映射到协议合法范围 [-1, 1]。因此这里满轴必须还原为 10 度。CraftGround 随后按
+# 每度 20/3 像素移动 GUI 光标，与 MineRL 的真实路径一致。
+
+LY -1.00 -> Ctrl W
+LY -0.50 -> W
+LY 1.00 -> S
+LX -1.00 -> A
+LX 1.00 -> D
+RX 1.00 -> MouseMoveX 10
+RY 1.00 -> MouseMoveY 10
+RT 1.00 -> LeftMouse
+LT 1.00 -> RightMouse
+A -> Space
+X -> Q
+Y -> E
+LS -> Shift
+Up -> Hotbar1
+Down -> Hotbar2
+Left -> Hotbar3
+Right -> Hotbar4
+
+# B（取消、返回）在 CraftGround 里对应 Esc，但 runtime 用 Esc 控制自己的 GUI 状态，
+# 映射过去会与环境的界面管理冲突，因此显式留空而不是挪用语义不符的键。
+#
+# RS（状态切换）本可映射 Ctrl 做独立疾跑开关，但 LY -1.00 已经用 Ctrl W 表达疾跑前进，
+# 两条规则会让 Ctrl 有两个来源：逆读时同一次按 Ctrl 无法判定该还原成 LY 满推还是 RS，
+# 行为克隆的训练目标因此产生歧义。疾跑只保留在 LY 的满行程上，RS 留空。
+#
+# LB/RB（上一项、下一项）语义上正好是快捷栏切换，但 CraftGround 的动作字典只收绝对的
+# hotbar.N，相对切换需要适配器自己记账当前选中格；而 ObservationSpaceMessage 的 44 个字段
+# 里没有「当前选中第几格」，记账一旦与真值分叉（倒档、reset、任何我们不知道的途径）观察侧
+# 无法发现。倒档是本项目的核心机制，因此快捷栏走绝对，LB/RB 留空。
+#
+# Hotbar5 到 Hotbar9 不可达：12 位刨去 7 个非快捷栏需求只剩 5 位，其中 4 位是方向键，
+# B/LB/RB 三位语义是取消与修饰，塞快捷栏属于挪用语义不符的空位。合成石镐用不到第 5 格
+# 以上。滚轮同样不可达——InputUtilMixin.setMouseCallbacks 只保存 cursorPosCallback 与
+# mouseButtonCallback，scrollCallback 参数直接丢弃。
+# unmapped: B RS LB RB Hotbar5 Hotbar6 Hotbar7 Hotbar8 Hotbar9 WheelUp WheelDown Esc

@@ -1,0 +1,7 @@
+environment_protocol=v2026_8_11
+action_protocol=tao-gamepad
+supported_action_protocols=tao-gamepad
+tick_rate=20
+commands=gamemode,effect,kill,time,weather
+backend=CraftGround
+observation_views=1
