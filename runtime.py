@@ -257,6 +257,7 @@ def create_environment(
     level_display_name_to_play: str = "",
     request_raycast: bool = False,
     requires_surrounding_blocks: bool = False,
+    killed_stat_keys: tuple[str, ...] | list[str] | None = None,
     verbose: bool = False,
     control_mode: str = "agent",
 ) -> Any:
@@ -283,6 +284,7 @@ def create_environment(
             `raycast_result` 恒为空——任务判据若依赖视线方块必须显式打开。
         requires_surrounding_blocks: 是否在观察里带玩家周围 27 个方块。**默认关闭**，
             关闭时 `surrounding_blocks` 恒为空列表。
+        killed_stat_keys: 要返回击杀统计的实体标识，例如 ``minecraft:zombie``。
         verbose: 是否打开 CraftGround 日志。
         control_mode: `agent` 使用锁步动作控制；`human` 完整透传窗口键鼠。
 
@@ -326,6 +328,7 @@ def create_environment(
         level_display_name_to_play=level_display_name_to_play,
         request_raycast=request_raycast,
         requires_surrounding_blocks=requires_surrounding_blocks,
+        killed_stat_keys=list(killed_stat_keys) if killed_stat_keys else None,
     )
     environment = CraftGroundEnvironment(
         config,
